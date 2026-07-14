@@ -97,9 +97,11 @@ class StepDef:
     apply: Callable[[CarSelection, int], None] | None
 ```
 
-`show_menu`, `is_valid_range`, `select_*`의 반복된 if/elif를 `STEPS: dict[int, StepDef]` 조회로 대체합니다.
+`is_valid_range`, `select_*`의 반복된 if/elif를 `STEPS: dict[int, StepDef]` 조회로 대체합니다.
 
 **주의**: step 0은 0(뒤로가기)을 허용하지 않고 `1~3`만 유효하지만, step 1~4는 `0`을 포함한 범위를 허용하는 비대칭이 원본에 있습니다. 하나의 공통 공식으로 일반화하지 말고 각 `StepDef`의 `range_check`에 그대로 반영합니다. step 4(RUN/Test)는 필드 설정이 아니라 별도 동작이므로 테이블에 억지로 넣지 않고 `cli.py`의 `main()`에서 명시적 분기로 유지합니다.
+
+**설계 보완 (Stage 4 진행 중 확정)**: 원본 `show_menu()`는 매번 `clear()`를 호출하는데, `clear()`는 `cli.py`가 갖고 있습니다. `steps.py`가 화면을 지우는 `show_menu` 함수까지 가지면 `cli.py`(STEPS 사용)와 `steps.py`(clear 사용) 사이에 순환 임포트가 생깁니다. 따라서 **`steps.py`는 `StepDef`/`STEPS`와, `clear()` 없이 `print`만 하는 `is_valid_range(step, ans)`까지만 담당**하고, 실제로 `clear()`를 호출해 메뉴를 출력하는 `show_menu(step)` 함수는 Stage 6의 `cli.py`로 옮깁니다. 또한 원본 상단에 정의만 되고 실제로는 쓰이지 않던 죽은 상수 `CarType_Q`/`Engine_Q`/`brakeSystem_Q`/`SteeringSystem_Q`/`Run_Test`(값은 0~4로 `step`과 동일)를 `steps.py`에서 `STEP_CAR_TYPE`/`STEP_ENGINE`/`STEP_BRAKE`/`STEP_STEERING`/`STEP_RUN_TEST`로 되살려 `STEPS`의 키로 사용합니다 (값 동일, 가독성 개선 목적, 동작 영향 없음).
 
 ### 5. `production.py` — RUN / Test
 
@@ -107,7 +109,7 @@ class StepDef:
 
 ### 6. `cli.py` — 진입점
 
-`delay`, `clear`, `main()` 루프를 담당합니다. 원본 `main()`과 동일한 흐름(스텝 진행/뒤로가기/exit/RUN/Test 분기)을 유지하되, 전역 변수 대신 `CarSelection` 인스턴스와 `STEPS` 테이블을 사용합니다.
+`delay`, `clear`, `show_menu(step)`(clear 후 `STEPS[step].menu_lines` + 공통 하단 구분선 출력), `main()` 루프를 담당합니다. 원본 `main()`과 동일한 흐름(스텝 진행/뒤로가기/exit/RUN/Test 분기)을 유지하되, 전역 변수 대신 `CarSelection` 인스턴스와 `STEPS` 테이블을 사용합니다.
 
 `main.py`(루트)는 다음과 같이 얇은 진입점 역할만 합니다.
 ```python
@@ -130,7 +132,7 @@ if __name__ == "__main__":
 2. **Stage 1 — `options.py` + 테스트**: `Option`/4개 dict 작성, `test_options.py`로 각 옵션의 `select_message`/`spec_label` 문자열이 원본과 정확히 일치하는지 검증.
 3. **Stage 2 — `rules.py` + 테스트**: `CompatibilityRule`/`first_violated_rule` 작성, `test_rules.py`로 5개 규칙 각각의 위반/통과 케이스와 first-match 순서를 검증.
 4. **Stage 3 — `state.py` + 테스트**: `CarSelection` 작성, `test_state.py`로 기본값/필드 검증.
-5. **Stage 4 — `steps.py` + 테스트**: `StepDef`/`STEPS` 작성, `test_steps.py`로 각 스텝의 메뉴 텍스트(줄 단위)·범위 검증(특히 step 0 비대칭)·에러 메시지가 원본과 일치하는지 검증.
+5. **Stage 4 — `steps.py` + 테스트**: `StepDef`/`STEPS`/`is_valid_range` 작성 (`show_menu`는 Stage 6 `cli.py`로 이동), `test_steps.py`로 각 스텝의 메뉴 텍스트(줄 단위)·범위 검증(특히 step 0 비대칭)·에러 메시지가 원본과 일치하는지 검증.
 6. **Stage 5 — `production.py` + 테스트**: `run_produced_car`/`test_produced_car` 작성, `test_production.py`로 RUN 성공/5개 실패/엔진고장, Test PASS/5개 FAIL을 검증 (stdout 캡처는 `capsys` 사용).
 7. **Stage 6 — `cli.py` + `main.py` + 통합 테스트**: 전체 루프 작성, `test_cli.py`에서 legacy `assembly.py`와 새 CLI를 동일 입력 시퀀스로 실행해 출력 diff가 없는지 자동 검증 (섹션 "pytest 도입"의 대표 시퀀스 전부 포함: RUN 성공/5개 실패/엔진고장, Test PASS/5개 FAIL, 잘못된 입력 2종, 뒤로가기, step4 처음으로, exit).
 8. **Stage 7 — 문서 반영 (완료)**: `CLAUDE.md`에 새 패키지 구조("Legacy vs Refactored 관계" 섹션: `car_assembly/`의 각 모듈 책임, `main.py` 진입점)와 pytest 실행 방법(설치, 전체/파일별/함수별 실행 명령, `test_cli.py`의 역할)을 미리 반영해 두었습니다. Stage 1~6 진행 중 실제 모듈/파일 구성이 계획과 달라지면 이 섹션을 함께 갱신합니다.

@@ -34,8 +34,8 @@ AI를 활용하여 레거시 코드를 리팩토링하는 연습(KATA)용 저장
 - `options.py` — `Option` dataclass와 `CAR_TYPES`/`ENGINES`/`BRAKES`/`STEERINGS` dict, 관련 상수. 새 차량 타입/부품 추가 시 이 파일만 수정.
 - `rules.py` — `CompatibilityRule` dataclass, `COMPATIBILITY_RULES` 리스트, `first_violated_rule`. 새 호환성 규칙 추가 시 이 파일만 수정.
 - `state.py` — `CarSelection` dataclass. 기존 전역 변수(`q0`~`q3`)를 대체.
-- `steps.py` — `StepDef` dataclass와 `STEPS` 테이블. 메뉴 텍스트/입력 범위 검증/선택 디스패치를 테이블 기반으로 일반화.
+- `steps.py` — `StepDef` dataclass와 `STEPS` 테이블(`STEP_CAR_TYPE`~`STEP_RUN_TEST` 키. 원본에 정의만 되고 쓰이지 않던 죽은 상수 `CarType_Q` 등을 되살린 것), 그리고 `is_valid_range(step, ans)`. 화면을 지우는 부수효과가 없는 순수 데이터/함수만 담당하며, `clear()`를 쓰는 `show_menu`는 `cli.py`와의 순환 임포트를 피하기 위해 여기 두지 않습니다.
 - `production.py` — `run_produced_car`/`test_produced_car`.
-- `cli.py` — `delay`/`clear`/`main()` 루프 (진입점 로직).
+- `cli.py` — `delay`/`clear`/`show_menu(step)`(clear 후 `STEPS[step].menu_lines` + 공통 하단 구분선 출력)/`main()` 루프 (진입점 로직).
 
 루트의 `main.py`는 `car_assembly.cli.main()`을 호출하는 얇은 진입점입니다 (`python main.py`로 실행).
