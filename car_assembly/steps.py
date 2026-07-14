@@ -10,6 +10,10 @@ STEP_BRAKE = 2
 STEP_STEERING = 3
 STEP_RUN_TEST = 4
 
+ANSWER_BACK = 0  # 모든 스텝 공통: "뒤로가기" / "처음 화면으로 돌아가기"
+RUN_TEST_CHOICE_RUN = 1  # step 4 전용: "RUN" 선택
+RUN_TEST_CHOICE_TEST = 2  # step 4 전용: "Test" 선택
+
 
 @dataclass(frozen=True)
 class StepDef:

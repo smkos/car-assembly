@@ -124,7 +124,7 @@ if __name__ == "__main__":
 - `.venv`에 `pip install pytest`로 설치하고, 재현 가능하도록 `requirements-dev.txt`에 `pytest`를 기록합니다.
 - 실행 명령: 전체 테스트 `pytest`, 특정 파일 `pytest tests/test_rules.py`, 특정 테스트 함수 `pytest tests/test_rules.py::test_sedan_continental_violation -v`.
 - 단위 테스트: `rules.py`(5개 규칙 + 정상 케이스), `state.py`(CarSelection 기본값), `steps.py`(range_check 경계값, 특히 step 0의 비대칭 범위), `production.py`(RUN 성공/실패/엔진고장, Test PASS/FAIL 5종) 등을 각각 순수 함수 단위로 검증합니다 (input()/시간지연 없이 테스트 가능).
-- 통합/회귀 테스트(`test_cli.py`): `subprocess.run([sys.executable, "assembly.py"], input=..., capture_output=True)`로 **레거시** 코드를 실행한 출력과, 동일 입력을 새 `main.py`(`car_assembly.cli.main`)에 넣은 출력을 비교하여 **바이트 단위로 동일**한지 자동 검증합니다. 이렇게 하면 "동작 보존"을 사람이 매번 수동으로 diff하지 않고 CI/로컬에서 반복 검증할 수 있습니다. (단, `delay()`로 인한 실제 대기 시간 때문에 테스트가 느려질 수 있으므로, 새 코드의 `cli.py`에서 `delay` 함수를 모듈 레벨로 분리해 두어 테스트에서 `monkeypatch`로 무력화할 수 있게 합니다 — 이는 지연 "시간"만 테스트에서 건너뛰는 것이며, 지연 호출 자체나 순서는 그대로 유지되어 동작에는 영향 없습니다.)
+- 통합/회귀 테스트(`test_cli.py`): `subprocess.run([sys.executable, "assembly.py"], input=..., capture_output=True)`로 **레거시** 코드를 실행한 출력과, 동일 입력을 새 `main.py`(`car_assembly.cli.main`)에 넣은 출력을 비교하여 **바이트 단위로 동일**한지 자동 검증합니다. 이렇게 하면 "동작 보존"을 사람이 매번 수동으로 diff하지 않고 CI/로컬에서 반복 검증할 수 있습니다. (단, `delay()`로 인한 실제 대기 시간 때문에 테스트가 느려질 수 있으므로, 새 코드의 `cli.py`에서 `delay` 함수를 모듈 레벨로 분리해 두었습니다 — `test_cli.py`는 `subprocess`로 legacy/신규 CLI를 **별도 프로세스**로 실행하므로 `monkeypatch`가 프로세스 경계를 넘지 못해, 대신 환경 변수 `CAR_ASSEMBLY_FAST_TEST`가 설정된 경우에만 `time.sleep`을 건너뛰도록 구현했습니다. 이 변수가 없는 일반 실행에서는 원본과 동일하게 실제로 대기하므로 동작에는 영향이 없습니다. legacy `assembly.py`는 수정할 수 없으므로 항상 실제 지연이 걸리며, 이 때문에 `test_cli.py` 전체 실행에는 약 1~2분이 소요됩니다.)
 
 ## 단계별 실행 순서 (각 단계마다 pytest 실행으로 검증 후 다음 단계 진행)
 
@@ -134,7 +134,7 @@ if __name__ == "__main__":
 4. **Stage 3 — `state.py` + 테스트**: `CarSelection` 작성, `test_state.py`로 기본값/필드 검증.
 5. **Stage 4 — `steps.py` + 테스트**: `StepDef`/`STEPS`/`is_valid_range` 작성 (`show_menu`는 Stage 6 `cli.py`로 이동), `test_steps.py`로 각 스텝의 메뉴 텍스트(줄 단위)·범위 검증(특히 step 0 비대칭)·에러 메시지가 원본과 일치하는지 검증.
 6. **Stage 5 — `production.py` + 테스트**: `run_produced_car`/`test_produced_car` 작성, `test_production.py`로 RUN 성공/5개 실패/엔진고장, Test PASS/5개 FAIL을 검증 (stdout 캡처는 `capsys` 사용).
-7. **Stage 6 — `cli.py` + `main.py` + 통합 테스트**: 전체 루프 작성, `test_cli.py`에서 legacy `assembly.py`와 새 CLI를 동일 입력 시퀀스로 실행해 출력 diff가 없는지 자동 검증 (섹션 "pytest 도입"의 대표 시퀀스 전부 포함: RUN 성공/5개 실패/엔진고장, Test PASS/5개 FAIL, 잘못된 입력 2종, 뒤로가기, step4 처음으로, exit).
+7. **Stage 6 — `cli.py` + `main.py` + 통합 테스트 (완료)**: 전체 루프 작성, `test_cli.py`에서 legacy `assembly.py`와 새 CLI를 19개 입력 시퀀스로 실행해 출력이 바이트 단위로 동일한지 자동 검증 (RUN 성공/5개 실패/엔진고장, Test PASS/5개 FAIL/엔진고장 무시, 잘못된 입력 2종, 뒤로가기 2종, 즉시 종료) — 전체 통과 확인(약 112초 소요, legacy의 실제 지연 때문).
 8. **Stage 7 — 문서 반영 (완료)**: `CLAUDE.md`에 새 패키지 구조("Legacy vs Refactored 관계" 섹션: `car_assembly/`의 각 모듈 책임, `main.py` 진입점)와 pytest 실행 방법(설치, 전체/파일별/함수별 실행 명령, `test_cli.py`의 역할)을 미리 반영해 두었습니다. Stage 1~6 진행 중 실제 모듈/파일 구성이 계획과 달라지면 이 섹션을 함께 갱신합니다.
 
 각 단계는 독립적으로 diff 검토 가능한 크기로 유지하고, 매 단계 후 `pytest`를 실행해 통과를 확인합니다.
